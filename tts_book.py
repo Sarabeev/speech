@@ -241,6 +241,24 @@ def main():
                 
                 sf.write(output_wav, final_audio, SAMPLE_RATE)
                 print(f"Успешно сохранен файл (Скорость: {SPEED_FACTOR}x): {output_wav}")
+                 # --- АВТОМАТИЧЕСКАЯ КОНВЕРТАЦИЯ В MP3 ЧЕРЕЗ FFMPEG ---
+                output_mp3 = output_wav.replace(".wav", ".mp3")
+                print(f"Конвертирую {output_wav} в MP3...")
+
+                # Запускаем ffmpeg (флаг -y перезаписывает файл, если он существует)
+                # -b:a 128k — отличный битрейт для аудиокниг (баланс веса и качества)
+                ffmpeg_cmd = f'ffmpeg -y -i "{output_wav}" -b:a 128k "{output_mp3}" -loglevel error'
+
+                # Выполняем команду в системе
+                exit_code = os.system(ffmpeg_cmd)
+
+                if exit_code == 0:
+                    print(f"Успешно сохранен MP3: {output_mp3}")
+                    os.remove(output_wav)  # Удаляем временный WAV, чтобы не занимал место
+                else:
+                    print(f"Предупреждение: FFmpeg вернул ошибку. Оставлен файл {output_wav}")
+                # -----------------------------------------------------
+
                 
                 
         except Exception as e:
