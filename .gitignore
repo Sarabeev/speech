@@ -1,0 +1,8 @@
+# Не пушим в репозиторий: модель, книга, мусор
+silero_model.pt
+HeavyKnight.txt
+old/
+subfolders.sh
+*.wav
+*.mp3
+.DS_Store

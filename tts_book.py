@@ -6,6 +6,8 @@ import soundfile as sf
 import numpy as np
 from num2words import num2words
 
+#3
+
 # --- НАСТРОЙКИ ---
 MODEL_PATH = "/Users/sarabeev/project/speech/silero_model.pt"
 SPEAKER = "xenia"
