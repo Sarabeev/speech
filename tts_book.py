@@ -17,15 +17,57 @@ SPEED_FACTOR = 1.4
 # ------------------
 
 
-def get_chapter_number(chapter_text):
-    """Извлекает только численный номер главы."""
-    # Берем только первую строчку текста главы
-    first_line = chapter_text.split('\n')[0]
-    match = re.search(r'Глава\s+(\d+)', first_line)
-    if match:
-        return int(match.group(1))
-    return 0
+def is_chapter_heading(line):
+    """Определяет, является ли строка заголовком главы.
 
+    Заголовком считается строка вида "[#] Глава <номер>", где <номер> —
+    это либо цифры (Глава 8:), либо прописное русское числительное
+    (Глава третья, Глава пятнадцатая, Глава двадцать первая).
+
+    Строки текста вроде "Глава гильдии склонил голову..." или
+    "Глава дворянского дома..." НЕ считаются заголовками, потому что
+    после слова "Глава" идёт обычное слово, а не номер.
+    """
+    text = line.strip().lstrip('#').strip()
+    if not text.startswith("Глава"):
+        return False
+    # Всё, что идёт после "Глава"
+    rest = text[len("Глава"):].strip()
+    if not rest:
+        return False
+    # Номер может быть цифрами
+    if re.match(r'^\d+', rest):
+        return True
+    # ... или прописным русским числительным (первая, вторая, ...,
+    # пятнадцатая, двадцать первая, сороковая и т.п.)
+    numeral = (
+        r'((одна|две|три|четыре|пять|шесть|семь|восемь|девять|'
+        r'десять|одиннадцать|двенадцать|тринадцать|четырнадцать|'
+        r'пятнадцать|шестнадцать|семнадцать|восемнадцать|'
+        r'девятнадцать|двадцать|тридцать|сорок|пятьдесят|шестьдесят|'
+        r'семьдесят|восемьдесят|девяносто|сто|двести|триста|'
+        r'четыреста|пятьсот|шестьсот|семьсот|восемьсот|девятьсот|'
+        r'тысяча)\s*)+'
+        r'(первая|вторая|третья|четвёртая|четвертая|пятая|шестая|'
+        r'седьмая|восьмая|девятая|десятая|'
+        r'дцать|дцатая|десятый|тысячный|сотый)'
+    )
+    # более мягкая проверка: слово после "Глава" оканчивается на число
+    soft = r'(' + '|'.join([
+        r'перв', r'втор', r'трет', r'четверт', r'четвёрт', r'пят', r'шест',
+        r'седьм', r'восьм', r'девят', r'десят',
+        r'одиннадцат', r'двенадцат', r'тринадцат', r'четырнадцат',
+        r'пятнадцат', r'шестнадцат', r'семнадцат', r'восемнадцат',
+        r'девятнадцат', r'двадцат', r'тридцат', r'сорок',
+        r'пятидесят', r'шестидесят', r'семидесят', r'восьмидесят',
+        r'девяност',
+        r'сот', r'двест', r'тр(?:иста|ёхсот|ехсот)', r'четыр(?:еста|ёхсот|ехсот)',
+        r'пятьсот', r'шестьсот', r'семьсот', r'восемьсот', r'девятьсот',
+        r'тысяч',
+    ]) + r'[а-яё]*)'
+    if re.match(soft, rest):
+        return True
+    return False
 
 
 def replace_numbers_with_words(text):
@@ -46,20 +88,19 @@ def parse_chapters_simply(full_text):
     current_chapter_lines = []
     
     for line in lines:
-        # Проверяем, начинается ли строка со слова 'Глава' (игнорируя пробелы по краям)
-        cleaned_line = line.strip()
-        if cleaned_line.startswith("Глава "):
+        # Заголовок главы — строка вида "[#] Глава <номер>"
+        if is_chapter_heading(line):
             # Если у нас уже накопился текст предыдущей главы — сохраняем её
             if current_chapter_lines:
                 chapters.append("\n".join(current_chapter_lines))
-            current_chapter_lines = [cleaned_line]  # Начинаем новую главу
+            current_chapter_lines = [line.strip()]  # Начинаем новую главу
         else:
             # Если это обычный текст, добавляем его к текущей главе
             if current_chapter_lines:
-                current_chapter_lines.append(cleaned_line)
+                current_chapter_lines.append(line.strip())
             else:
                 # На случай, если в самом начале файла идет текст/вступление до "Главы 1"
-                current_chapter_lines.append(cleaned_line)
+                current_chapter_lines.append(line.strip())
                 
     # Не забываем добавить последнюю главу
     if current_chapter_lines:
@@ -67,18 +108,16 @@ def parse_chapters_simply(full_text):
         
     return chapters
 
-def get_chapter_name(chapter_text):
-    """Извлекает номер из первой строки текста главы."""
-    first_line = chapter_text.split('\n')[0]
-    match = re.search(r'Глава\s+(\d+)', first_line)
-    if match:
-        # Превращаем строку с номером в число
-        chapter_num = int(match.group(1))
-        # Форматируем с 5 ведущими нулями
-        return f"Chapter_{chapter_num:05d}"
-    if match:
-        return f"Chapter_{match.group(1)}"
-    return "Chapter_Unknown"
+def get_chapter_name(index):
+    """Возвращает имя файла главы по её порядковому номеру (собственная нумерация от 1)."""
+    return f"Chapter_{index:05d}"
+
+def get_chapter_title(chapter_text):
+    """Возвращает первую (заголовочную) строку главы для вывода в консоль."""
+    first_line = chapter_text.split('\n')[0].strip()
+    if not first_line:
+        return "(без заголовка)"
+    return first_line
 
 def split_text_into_chunks(text, max_chars=800):
     """Режет текст главы на фрагменты до 800 символов."""
@@ -117,15 +156,7 @@ def main():
         sys.exit(1)
         
     input_file = sys.argv[1]
-    # Считываем номер начальной главы, если он передан (иначе начинаем с 0)
-    start_from_chapter = 0
-    if len(sys.argv) >= 3:
-        try:
-            start_from_chapter = int(sys.argv[2])
-        except ValueError:
-            print("Предупреждение: Номер главы должен быть числом. Начинаю с самого начала.")
-    
-    
+
     if not os.path.exists(input_file):
         print(f"Ошибка: Файл текста '{input_file}' не найден!")
         sys.exit(1)
@@ -140,20 +171,12 @@ def main():
 
     # Парсим главы построчно
     all_chapters = parse_chapters_simply(full_text)
-    
-    # --- ФИЛЬТРАЦИЯ ГЛАВ ПО НАЧАЛЬНОМУ НОМЕРУ ---
-    chapters_to_process = []
-    for ch in all_chapters:
-        ch_num = get_chapter_number(ch)
-        if ch_num >= start_from_chapter:
-            chapters_to_process.append((ch_num, ch))
-            
-    if not chapters_to_process:
-        print(f"Главы с номером >= {start_from_chapter} не найдены в файле!")
+
+    if not all_chapters:
+        print("В файле не найдено ни одной главы!")
         sys.exit(1)
-        
+
     print(f"Всего глав в книге: {len(all_chapters)}")
-    print(f"Будет озвучено глав (начиная с {start_from_chapter}): {len(chapters_to_process)}")
 
 
 #    print(f"Обнаружено блоков/глав для озвучки: {len(chapters)}")
@@ -163,18 +186,19 @@ def main():
     model = torch.package.PackageImporter(MODEL_PATH).load_pickle("tts_models", "model")
     model.to(device)
 
-    #for idx, chapter_content in enumerate(chapters_to_process, start=1):
-    #    chapter_content = chapter_content.strip()
-    for idx, (ch_num, chapter_content) in enumerate(chapters_to_process, start=1):
+    #for idx, chapter_content in enumerate(all_chapters, start=1):
+    for idx, chapter_content in enumerate(all_chapters, start=1):
         chapter_content = chapter_content.strip()        
         if not chapter_content:
             continue
             
-        base_name = get_chapter_name(chapter_content)
+        base_name = get_chapter_name(idx)
+        chapter_title = get_chapter_title(chapter_content)
         output_wav = f"{base_name}.wav"
         
         chunks = split_text_into_chunks(chapter_content, MAX_CHARS)
-        print(f"\n=== ПОДГОТОВКА [{idx}/{len(chapters_to_process)}] {base_name} ===")
+        print(f"\n=== ГЛАВА {idx}/{len(all_chapters)} [{base_name}] ===")
+        print(f"Заголовок: {chapter_title}")
         print(f"Глава разбита на {len(chunks)} частей. Итоговое имя: {output_wav}")
         
         chapter_audio_data = []
