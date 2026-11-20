@@ -225,12 +225,42 @@ def sanitize_folder_name(name):
 
 
 # ------------------ Озвучка ------------------
-def tts_chapter(model, title, text, out_mp3):
-    """Озвучивает одну главу в MP3."""
+def tts_chapter(model, index, title, text, out_mp3):
+    """Озвучивает одну главу в MP3.
+
+    В начале каждой главы произносится её номер и, если есть, название
+    (например «Глава три. Название главы»).
+    """
+    # Произносимый номер главы прописью: 1 -> "глава один", 2 -> "глава два"...
+    number_words = num2words(index, lang='ru')
+
+    # Если в названии главы уже есть слово "Глава" с номером (обычный случай
+    # "Глава 1", "Глава 2", ...), озвучиваем само название — это уже и есть
+    # «глава + номер». Цифры в названии проговариваем прописью.
+    m_heading = re.match(r'^\s*Глава\s+\d+\s*$', title or '', flags=re.IGNORECASE)
+    if m_heading:
+        intro = replace_numbers_with_words(title)
+    else:
+        # Иначе озвучиваем "Глава <номер>.<название, если есть>".
+        intro = f"Глава {number_words}."
+        if title:
+            intro += f" {title}"
+
     chunks = split_text_into_chunks(text, MAX_CHARS)
     print(f"  Глава разбита на {len(chunks)} частей")
 
     chapter_audio_data = []
+    # Сначала озвучиваем заголовок: "Глава N. Название".
+    audio = model.apply_tts(
+        text=intro,
+        speaker=SPEAKER,
+        sample_rate=SAMPLE_RATE
+    )
+    chapter_audio_data.append(audio.numpy())
+    print(f"  --- Заголовок главы -> TTS ---")
+    print("  " + intro)
+    print("-" * 44)
+
     for c_idx, chunk in enumerate(chunks, start=1):
         if c_idx == 1:
             chunk = chunk.replace(" - ", ". ").replace(" – ", ". ")
@@ -308,7 +338,7 @@ def process_zip(model, zip_path, out_dir):
         out_mp3 = os.path.join(out_dir, make_chapter_filename(idx))
         print(f"\n  === ГЛАВА {idx}/{len(chapters)} [{title_disp}] === -> {os.path.basename(out_mp3)}")
         try:
-            ok = tts_chapter(model, chapter["title"], chapter["text"], out_mp3)
+            ok = tts_chapter(model, idx, chapter["title"], chapter["text"], out_mp3)
             if ok:
                 print(f"  Сохранено: {out_mp3}")
         except Exception as e:
